@@ -35,15 +35,15 @@ def real2complex_alm(alm):
 
 def A_matrix_func(data):
     Chalf = np.sqrt(data.cl_th[:data.lmax])*data.beam[:data.lmax]
-    map2 = hp.alm2map(hp.almxfl(real2complex_alm(data.alm),Chalf),data.nside)/data.sigma**2
+    map2 = hp.alm2map(hp.almxfl(real2complex_alm(data.alm),Chalf),data.nside)*data.invvar
     alm2 = hp.almxfl(hp.map2alm(map2,data.lmax,use_weights=False)*hp.nside2npix(data.nside)/4./np.pi,Chalf)
     #map3 = hp.alm2map(alm2,data.nside)
     #alm3 = hp.map2alm(map3,data.lmax)
     return data.alm+complex2real_alm(alm2)
 
-def rs_data_matrix_func(data):
+def rs_data_matrix_func(data,):
     Chalf = np.sqrt(data.cl_th[:data.lmax])*data.beam[:data.lmax]
-    map2 = hp.alm2map(real2complex_alm(data.alm),data.nside)/data.sigma**2
+    map2 = hp.alm2map(real2complex_alm(data.alm),data.nside)*data.invvar
     alm2 = hp.almxfl(hp.map2alm(map2,data.lmax,use_weights=False)*hp.nside2npix(data.nside)/4./np.pi,Chalf)
     #map3 = hp.alm2map(alm2,data.nside)
     #alm3 = hp.map2alm(map3,data.lmax)
@@ -51,7 +51,7 @@ def rs_data_matrix_func(data):
 
 def rs_w1_matrix_func(data):
     Chalf = np.sqrt(data.cl_th[:data.lmax])*data.beam[:data.lmax]
-    map2 = hp.alm2map(real2complex_alm(data.alm),data.nside)/data.sigma
+    map2 = hp.alm2map(real2complex_alm(data.alm),data.nside)*np.sqrt(data.invvar)
     alm2 = hp.almxfl(hp.map2alm(map2,data.lmax,use_weights=False)*hp.nside2npix(data.nside)/4./np.pi,Chalf)
     #map3 = hp.alm2map(alm2,data.nside)
     #alm3 = hp.map2alm(map3,data.lmax)
@@ -72,6 +72,7 @@ class data_class:
     cl_th = 0
     beam = 0
     sigma = 0
+    invvar = 0
     lmax = 0
     nside = 0
     def __init__(self, vec):
@@ -79,8 +80,9 @@ class data_class:
         self.cl_th = vec[1]
         self.beam = vec[2]
         self.sigma = vec[3]
-        self.lmax = vec[4]
-        self.nside = vec[5]
+        self.invvar = vec[4]
+        self.lmax = vec[5]
+        self.nside = vec[6]
 
 def CG_algo_dirty(Matrix,b,data_start,i_max,eps):
     """                                                                                                                                                                     
@@ -92,14 +94,15 @@ def CG_algo_dirty(Matrix,b,data_start,i_max,eps):
     cl_th = data_start.cl_th
     beam = data_start.beam
     sigma = data_start.sigma
+    invvar = data_start.invvar
     lmax = data_start.lmax
     nside = data_start.nside
-    out = data_class([0,cl_th,beam,sigma,lmax,nside])
+    out = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
     #print b
     #print data_start.alm
     r = b-Matrix(data_start)#np.dot(A,x)
     print "r[10] = ",r[10]
-    d = data_class([0,cl_th,beam,sigma,lmax,nside])
+    d = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
     d.alm = r.copy()
     print "ini ","start = ",data_start.alm[10],"x = ",x[10],"d = ",d.alm[10]
     delt_n = np.dot(r.T,r)
@@ -115,7 +118,7 @@ def CG_algo_dirty(Matrix,b,data_start,i_max,eps):
         #print "test : r[50] = ",r[50],"d[50] = ",d.alm[50],"x[50] = ",x[50],"b[50] = ",b[50]
         if i%10==0:
             #print "in here"
-            dat_temp = data_class([0,cl_th,beam,sigma,lmax,nside])
+            dat_temp = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
             dat_temp.alm = x
             r = b - Matrix(dat_temp)
         else:
@@ -151,11 +154,12 @@ def CG_algo(Matrix,b,data_start,i_max,eps):
     cl_th = data_start.cl_th
     beam = data_start.beam
     sigma = data_start.sigma
+    invvar = data_start.invvar
     lmax = data_start.lmax
     nside = data_start.nside
-    out = data_class([0,cl_th,beam,sigma,lmax,nside])
+    out = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
     r = b-Matrix(data_start)
-    d = data_class([0,cl_th,beam,sigma,lmax,nside])
+    d = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
     d.alm = r.copy()
     delt_n = np.dot(r.T,r)
     delt_0 = delt_n.copy()
@@ -166,7 +170,7 @@ def CG_algo(Matrix,b,data_start,i_max,eps):
         alph = np.float(delt_n) / np.dot(d.alm.T,q)
         x = x + alph*d.alm
         if i%10==0:
-            dat_temp = data_class([0,cl_th,beam,sigma,lmax,nside])
+            dat_temp = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
             dat_temp.alm = x
             r = b - Matrix(dat_temp)
         else:
