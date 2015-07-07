@@ -2,27 +2,34 @@ import healpy as hp
 import numpy as np
 from matplotlib import pyplot as plt
 import CG_functions as CG
-import Sampling_functions as Sampling
 import time
 import sys
+import camber as cb
+
 
 plt.ion()
 nside = np.int(sys.argv[1])
 lmax = np.int(sys.argv[2])
 n_iter  = np.int(sys.argv[3])
 
+params = cb.ini2dic("DX11_adi_params.ini")
 
 print "nside = ", nside, "lmax = ",lmax,"n_iter = ",n_iter
 ### load data
 ### define cl, noise, and beam from commander/planck   
 
 #beam from commander
-beam_file = "dx11_v2_commander_int_beam_005a_2048.fits"
+#beam_file = "dx11_v2_commander_int_beam_005a_2048.fits"
+#cl = np.load("test_cl.npy")*2.7255**2*1e12
+#bl = hp.read_cl(beam_file)
 
-#cl from camb, planck 2015 I believe, converted to muK^2
-cl = np.load("test_cl.npy")*2.7255**2*1e12
+#Planck 2015 camb Cl
+cl = cb.generate_spectrum(params)[:,1]
 
-bl = hp.read_cl(beam_file)
+#Gaussian beam
+bl = CG.gaussian_beam(np.size(cl),5)
+
+
 
 # White noise with amplitude given by the mean of the noise power spectrum (commander 2015 I believe)
 sigma_l = 1.7504523623688016e-16*1e12
@@ -54,10 +61,10 @@ inv_var = 1/sigma**2 *np.ones(hp.nside2npix(nside))
 alm_guess = np.zeros((lmax+1)**2)
 
 # define the first guess, the b from eq 25 since the code was design with this at first (might not be best idea ever)
-Guess_dat = CG.data_class([alm_guess,cl,hp.read_cl("dx11_v2_commander_int_beam_005a_2048.fits"),sigma,inv_var,lmax,nside])
-w_0 = CG.data_class([np.random.randn((lmax+1)**2),cl,hp.read_cl("dx11_v2_commander_int_beam_005a_2048.fits"),sigma,inv_var,lmax,nside])
-w_1 = CG.data_class([0,cl,hp.read_cl("dx11_v2_commander_int_beam_005a_2048.fits"),sigma,inv_var,lmax,nside])
-in_map = CG.data_class([0,cl,hp.read_cl("dx11_v2_commander_int_beam_005a_2048.fits"),sigma,inv_var,lmax,nside])
+Guess_dat = CG.data_class([alm_guess,cl,bl,sigma,inv_var,lmax,nside])
+w_0 = CG.data_class([np.random.randn((lmax+1)**2),cl,bl,sigma,inv_var,lmax,nside])
+w_1 = CG.data_class([0,cl,bl,sigma,inv_var,lmax,nside])
+in_map = CG.data_class([0,cl,bl,sigma,inv_var,lmax,nside])
 
 w1 = np.random.randn(hp.nside2npix(nside))
 d = map
