@@ -2,8 +2,17 @@ import numpy as np
 import healpy as hp
 import itertools
 from matplotlib import pyplot as plt
-import Sampling_functions as Sf
 
+
+def gaussian_beam(lmax, fwhm):
+   """
+   Returns the spherical transform of a gaussian beam
+   from l=0 to lmax with a fwhm in arcmin.
+   """
+   l_arr = np.arange(lmax+1)
+   sigma = np.radians(fwhm/60.) / np.sqrt(8.*np.log(2.))
+   beam = np.exp(-0.5*l_arr*(l_arr+1)*sigma*sigma)
+   return beam
 
 def complex2real_alm(alm):
     """
@@ -20,7 +29,9 @@ def complex2real_alm(alm):
 
 
 def real2complex_alm(alm):
-    """                                                                                                                                                                           To be finished: compute the real a_lm                                                                                                                                         """
+    """
+    To be finished: compute the real a_lm
+    """
     lmax = int(np.sqrt(alm.size)-1)
     alm_temp = np.zeros(hp.Alm.getsize(lmax))+1j*0
     index_pos = np.array(list(itertools.chain.from_iterable([[hp.Alm.getidx(lmax, l, m) for m in range(1,l+1)] for l in range(lmax+1)])))
@@ -34,30 +45,38 @@ def real2complex_alm(alm):
     
 
 def A_matrix_func(data):
+    """
+    cf eq 25 of eriksen 2004
+    """
     Chalf = np.sqrt(data.cl_th[:data.lmax])*data.beam[:data.lmax]
     map2 = hp.alm2map(hp.almxfl(real2complex_alm(data.alm),Chalf),data.nside)*data.invvar
     alm2 = hp.almxfl(hp.map2alm(map2,data.lmax,use_weights=False)*hp.nside2npix(data.nside)/4./np.pi,Chalf)
-    #map3 = hp.alm2map(alm2,data.nside)
-    #alm3 = hp.map2alm(map3,data.lmax)
     return data.alm+complex2real_alm(alm2)
 
-def rs_data_matrix_func(data,):
+def rs_data_matrix_func(data,d):
+    """
+    cf eq 25 of eriksen 2004
+    """
     Chalf = np.sqrt(data.cl_th[:data.lmax])*data.beam[:data.lmax]
-    map2 = hp.alm2map(real2complex_alm(data.alm),data.nside)*data.invvar
+    map2 = d*data.invvar
+    #map2 = hp.alm2map(real2complex_alm(data.alm),data.nside)*data.invvar
     alm2 = hp.almxfl(hp.map2alm(map2,data.lmax,use_weights=False)*hp.nside2npix(data.nside)/4./np.pi,Chalf)
-    #map3 = hp.alm2map(alm2,data.nside)
-    #alm3 = hp.map2alm(map3,data.lmax)
     return complex2real_alm(alm2)
 
-def rs_w1_matrix_func(data):
+def rs_w1_matrix_func(data,w1):
+    """
+    cf eq 25 of eriksen 2004
+    """
     Chalf = np.sqrt(data.cl_th[:data.lmax])*data.beam[:data.lmax]
-    map2 = hp.alm2map(real2complex_alm(data.alm),data.nside)*np.sqrt(data.invvar)
+    map2 = w1*np.sqrt(data.invvar)
+    #map2 = hp.alm2map(real2complex_alm(data.alm),data.nside)*np.sqrt(data.invvar)
     alm2 = hp.almxfl(hp.map2alm(map2,data.lmax,use_weights=False)*hp.nside2npix(data.nside)/4./np.pi,Chalf)
-    #map3 = hp.alm2map(alm2,data.nside)
-    #alm3 = hp.map2alm(map3,data.lmax)
     return complex2real_alm(alm2)
 
 def return_map(map_class):
+    """
+    We solve for C^{-1/2}x, here is to recover x
+    """
     Shalf = np.sqrt(map_class.cl_th[:map_class.lmax])
     alm_out = hp.almxfl(real2complex_alm(map_class.alm),Shalf)
     cl_out = hp.alm2cl(alm_out)
@@ -85,7 +104,7 @@ class data_class:
         self.nside = vec[6]
 
 def CG_algo_dirty(Matrix,b,data_start,i_max,eps):
-    """                                                                                                                                                                     
+    """
     Matrix is the function to apply the matrix on a vector
     data_start is a data_class class, with real alms
     """
@@ -145,9 +164,10 @@ def CG_algo_dirty(Matrix,b,data_start,i_max,eps):
 
 
 def CG_algo(Matrix,b,data_start,i_max,eps):
-    """                                                                                                                                                                       
-    Matrix is the function to apply the matrix on a vector                                                                                                                    
-    data_start is a data_class class, with real alms                                                                                                                          
+    """
+    Cf. algorithm B2 from Shewchuk 94 (page 50)
+    Matrix is the function to apply the matrix on a vector (eg A_matrix_func)
+    data_start is a data_class class, with real alms
     """
     i = 0
     x = data_start.alm.copy()
@@ -165,6 +185,8 @@ def CG_algo(Matrix,b,data_start,i_max,eps):
     delt_0 = delt_n.copy()
     iter_out_map=[]
     iter_out_cl=[]
+    res = []
+    x_list =[]
     while (i<i_max and delt_n > (eps**2 * delt_0)):
         q = Matrix(d)
         alph = np.float(delt_n) / np.dot(d.alm.T,q)
@@ -181,8 +203,53 @@ def CG_algo(Matrix,b,data_start,i_max,eps):
         d.alm = r + bet*d.alm
         i += 1
         out.alm = x
+        res.append(hp.alm2cl(real2complex_alm(r-(b-Matrix(data_start))))/hp.alm2cl(real2complex_alm(b-Matrix(data_start))))
+        #x_list.append(real2complex_alm(x))
+        iter_out_map.append(return_map(out)[1])
+        iter_out_cl.append(return_map(out)[0])
+    return iter_out_map,iter_out_cl,res#x_list
+
+
+
+def CG_algo_precond_diag(Matrix,Precond_diag,b,data_start,i_max,eps):
+    """
+    Matrix is the function to apply the matrix on a vector 
+    data_start is a data_class class, with real alms 
+    """
+    i = 0
+    x = data_start.alm.copy()
+    cl_th = data_start.cl_th
+    beam = data_start.beam
+    sigma = data_start.sigma
+    lmax = data_start.lmax
+    nside = data_start.nside
+    invvar = data_start.invvar
+    out = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
+    r = b-Matrix(data_start)
+    d = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
+    d.alm = r.copy()
+    d.alm = Precond_diag*r
+    delt_n = np.dot(r.T,d.alm)
+    delt_0 = delt_n.copy()
+    iter_out_map=[]
+    iter_out_cl=[]
+    while (i<i_max and delt_n > (eps**2 * delt_0)):
+        q = Matrix(d)
+        alph = np.float(delt_n) / np.dot(d.alm.T,q)
+        x = x + alph*d.alm
+        if i%10==0:
+            dat_temp = data_class([0,cl_th,beam,sigma,invvar,lmax,nside])
+            dat_temp.alm = x
+            r = b - Matrix(dat_temp)
+        else:
+            r = r - alph*q
+        s = Precond_diag*r
+        delt_old = delt_n.copy()
+        delt_n = np.dot(r.T,s)
+        bet = delt_n / delt_old
+        d.alm = s + bet*d.alm
+        i += 1
+        out.alm = x
         iter_out_map.append(return_map(out)[1])
         iter_out_cl.append(return_map(out)[0])
     return iter_out_map,iter_out_cl
-
-
